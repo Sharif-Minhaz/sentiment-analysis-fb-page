@@ -37,7 +37,7 @@ const go = (delta) => {
       Most negative comments first - these are the ones worth replying to
     </p>
 
-    <ul class="divide-y" :style="{ borderColor: 'var(--hairline)' }">
+    <ul class="divide-y divide-[color:var(--hairline)]">
       <li
         v-for="comment in visible"
         :key="comment.id"

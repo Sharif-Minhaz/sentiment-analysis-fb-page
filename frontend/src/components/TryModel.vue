@@ -1,7 +1,6 @@
 <script setup>
 import { ref } from 'vue'
 import { classify } from '../api'
-import { colorForSentiment } from '../theme'
 
 const text = ref('')
 const result = ref(null)
@@ -51,7 +50,7 @@ async function run() {
     <p v-if="error" class="mt-3 text-sm" :style="{ color: 'var(--negative)' }">{{ error }}</p>
 
     <div v-if="result" class="mt-3 flex flex-wrap items-center gap-3 text-sm">
-      <span class="w-2.5 h-2.5 rounded-sm" :style="{ background: colorForSentiment(result.sentiment) }" />
+      <span class="w-2.5 h-2.5 rounded-sm" :style="{ background: `var(--${result.sentiment})` }" />
       <span class="font-medium capitalize">{{ result.sentiment }}</span>
       <span class="num" :style="{ color: 'var(--ink-2)' }">
         P(positive) = {{ result.score.toFixed(3) }}

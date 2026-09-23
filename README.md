@@ -54,8 +54,8 @@ cd ../backend && uv run python app.py
 Then everything is served from **http://127.0.0.1:5000** — one process, no Node
 required at runtime.
 
-It runs on **demo data** out of the box, so you can see the whole thing working
-before touching Meta's developer portal.
+Until Facebook is configured the dashboard shows an empty state — there is no
+demo data.
 
 ## Going live on your real page
 
@@ -78,7 +78,7 @@ backend/
   dataset.py         load / clean / split          <- data decisions live here
   train.py           train, compare, evaluate, save <- modelling decisions here
   predict.py         load the pipeline, classify    <- used by the web app
-  facebook.py        Graph API client + demo mode
+  facebook.py        Graph API client
   db.py              SQLite schema and queries
   app.py             Flask API + serves the built frontend
   static/            frontend build output   (gitignored)

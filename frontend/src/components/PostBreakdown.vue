@@ -20,7 +20,7 @@ defineProps({ posts: { type: Array, default: () => [] } })
             <th class="pb-2 pl-3 font-medium w-32">Mix</th>
           </tr>
         </thead>
-        <tbody class="divide-y" :style="{ borderColor: 'var(--hairline)' }">
+        <tbody class="divide-y divide-[color:var(--hairline)]">
           <tr v-for="post in posts" :key="post.id">
             <td class="py-2 pr-3 max-w-xs truncate">{{ post.message || post.id }}</td>
             <td class="py-2 text-right num">{{ post.total }}</td>

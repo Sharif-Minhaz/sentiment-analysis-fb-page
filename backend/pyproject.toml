@@ -11,5 +11,4 @@ dependencies = [
     "flask>=3.0",
     "requests>=2.32",
     "python-dotenv>=1.0",
-    "matplotlib>=3.9",
 ]

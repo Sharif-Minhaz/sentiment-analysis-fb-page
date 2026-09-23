@@ -38,9 +38,12 @@ export function useTheme() {
   }
 }
 
-/** Read a CSS custom property, so JS never hardcodes a palette value. */
+/**
+ * Read a CSS custom property, so JS never hardcodes a palette value.
+ *
+ * Only for Chart.js, which paints to a canvas and needs a real color string.
+ * Anything rendered as HTML should use `var(--name)` in its style instead:
+ * the browser resolves that live, so it follows a theme toggle for free.
+ */
 export const cssVar = (name) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim()
-
-export const colorForSentiment = (s) =>
-  cssVar(s === 'positive' ? '--positive' : s === 'negative' ? '--negative' : '--neutral')

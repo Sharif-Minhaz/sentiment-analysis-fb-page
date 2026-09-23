@@ -1,6 +1,5 @@
 <script setup>
 import { computed } from 'vue'
-import { cssVar } from '../theme'
 
 const props = defineProps({
   totals: { type: Object, default: () => ({}) },
@@ -9,11 +8,16 @@ const props = defineProps({
 
 // A single headline number is not a chart -- it's a stat tile. Four of them
 // answer "how is the page doing" faster than any plot could.
+//
+// Colors are var() references, not cssVar() lookups: the browser resolves a
+// var() live, so the swatch follows a theme toggle. A resolved hex would be
+// cached by this computed (the theme isn't one of its reactive inputs) and
+// stay stuck on the old theme's color.
 const tiles = computed(() => [
   { label: 'Total',    value: props.totals.total    || 0, pct: null, color: null },
-  { label: 'Positive', value: props.totals.positive || 0, pct: props.percentages.positive ?? 0, color: cssVar('--positive') },
-  { label: 'Neutral',  value: props.totals.neutral  || 0, pct: props.percentages.neutral  ?? 0, color: cssVar('--neutral')  },
-  { label: 'Negative', value: props.totals.negative || 0, pct: props.percentages.negative ?? 0, color: cssVar('--negative') },
+  { label: 'Positive', value: props.totals.positive || 0, pct: props.percentages.positive ?? 0, color: 'var(--positive)' },
+  { label: 'Neutral',  value: props.totals.neutral  || 0, pct: props.percentages.neutral  ?? 0, color: 'var(--neutral)'  },
+  { label: 'Negative', value: props.totals.negative || 0, pct: props.percentages.negative ?? 0, color: 'var(--negative)' },
 ])
 </script>
 

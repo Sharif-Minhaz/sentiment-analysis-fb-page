@@ -121,8 +121,12 @@ def analytics() -> dict:
 
         total = sum(totals.values())
 
+        # SUBSTR, not DATE(): Facebook sends "2026-09-23T05:58:14+0000", and
+        # SQLite's DATE() only accepts "+00:00" or "Z" -- it returns NULL for
+        # every row, collapsing the whole timeline into one undated bar. The
+        # first 10 characters are the UTC date, which is all we need.
         timeline = [dict(r) for r in conn.execute(
-            """SELECT DATE(created_time) AS day, sentiment, COUNT(*) AS n
+            """SELECT SUBSTR(created_time, 1, 10) AS day, sentiment, COUNT(*) AS n
                  FROM comments
                 WHERE sentiment IS NOT NULL AND created_time IS NOT NULL
              GROUP BY day, sentiment
@@ -167,17 +171,3 @@ def analytics() -> dict:
         "per_post": per_post,
         "needs_attention": attention,
     }
-
-
-def list_comments(sentiment: str | None = None, limit: int = 100) -> list[dict]:
-    query = """SELECT id, post_id, message, author, created_time,
-                      sentiment, score, confidence
-                 FROM comments WHERE sentiment IS NOT NULL"""
-    params: list = []
-    if sentiment:
-        query += " AND sentiment = ?"
-        params.append(sentiment)
-    query += " ORDER BY created_time DESC LIMIT ?"
-    params.append(limit)
-    with connect() as conn:
-        return [dict(r) for r in conn.execute(query, params)]

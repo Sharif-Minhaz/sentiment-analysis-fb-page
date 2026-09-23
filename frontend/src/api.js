@@ -12,8 +12,6 @@ async function request(path, options = {}) {
 export const getModel = () => request('/api/model')
 export const getAnalytics = () => request('/api/analytics')
 export const refresh = () => request('/api/refresh', { method: 'POST' })
-export const getComments = (sentiment, limit = 100) =>
-  request(`/api/comments?sentiment=${sentiment ?? ''}&limit=${limit}`)
 
 export const classify = (text) =>
   request('/api/classify', {

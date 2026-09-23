@@ -91,13 +91,6 @@ def refresh():
     })
 
 
-@app.get("/api/comments")
-def get_comments():
-    sentiment = request.args.get("sentiment")
-    limit = min(int(request.args.get("limit", 100)), 500)
-    return jsonify(db.list_comments(sentiment=sentiment, limit=limit))
-
-
 @app.post("/api/classify")
 def classify_text():
     """Try-it-yourself box: type a sentence, see what the model thinks."""

@@ -21,7 +21,9 @@ const legend = computed(() =>
     label: key[0].toUpperCase() + key.slice(1),
     value: props.totals[key] || 0,
     pct: props.percentages[key] ?? 0,
-    color: cssVar(`--${key}`),
+    // var(), not cssVar(): resolved live by the browser, so it follows a
+    // theme toggle. Only the canvas needs resolved hex values.
+    color: `var(--${key})`,
   })),
 )
 
