@@ -1,0 +1,15 @@
+[project]
+name = "sentiment-analysis"
+version = "0.1.0"
+description = "Facebook page comment sentiment dashboard - classical ML (TF-IDF + Logistic Regression)"
+requires-python = ">=3.12"
+dependencies = [
+    "scikit-learn>=1.5",
+    "pandas>=2.2",
+    "numpy>=1.26",
+    "joblib>=1.4",
+    "flask>=3.0",
+    "requests>=2.32",
+    "python-dotenv>=1.0",
+    "matplotlib>=3.9",
+]

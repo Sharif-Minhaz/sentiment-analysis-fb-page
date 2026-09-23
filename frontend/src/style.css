@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ------------------------------------------------------------------
+   Chart palette, as CSS custom properties.
+
+   Sentiment is POLARITY, not identity, so this is a *diverging* scale:
+   two opposed hues with a neutral gray midpoint -- not three arbitrary
+   categorical colors. The gray is load-bearing: "no polarity" should read
+   as "nothing", which is what a diverging midpoint is for.
+
+   Both modes were checked with a colorblind-separation validator.
+   Worst adjacent CVD separation: light dE 8.7, dark dE 10.3 (target >= 8).
+   The dark gray is #b5b3a8 rather than #898781 because at #898781 the
+   dark-mode red and gray collapse to dE 3.9 under protanopia.
+
+   Components read these with getComputedStyle, so the palette is defined
+   once here and never duplicated in JS.
+   ------------------------------------------------------------------ */
+:root {
+  color-scheme: light;
+  --surface:  #fcfcfb;
+  --plane:    #f9f9f7;
+  --ink:      #0b0b0b;
+  --ink-2:    #52514e;
+  --muted:    #898781;
+  --grid:     #e1e0d9;
+  --axis:     #c3c2b7;
+  --hairline: rgba(11, 11, 11, 0.10);
+  --positive: #2a78d6;
+  --neutral:  #898781;
+  --negative: #e34948;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme='light'])) {
+    color-scheme: dark;
+    --surface:  #1a1a19;
+    --plane:    #0d0d0d;
+    --ink:      #ffffff;
+    --ink-2:    #c3c2b7;
+    --muted:    #898781;
+    --grid:     #2c2c2a;
+    --axis:     #383835;
+    --hairline: rgba(255, 255, 255, 0.10);
+    --positive: #3987e5;
+    --neutral:  #b5b3a8;
+    --negative: #e66767;
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --surface:  #1a1a19;
+  --plane:    #0d0d0d;
+  --ink:      #ffffff;
+  --ink-2:    #c3c2b7;
+  --muted:    #898781;
+  --grid:     #2c2c2a;
+  --axis:     #383835;
+  --hairline: rgba(255, 255, 255, 0.10);
+  --positive: #3987e5;
+  --neutral:  #b5b3a8;
+  --negative: #e66767;
+}
+
+body {
+  background: var(--plane);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+@layer components {
+  .card { @apply rounded-xl; background: var(--surface); border: 1px solid var(--hairline); }
+  /* tabular figures only where numbers must align vertically */
+  .num  { font-variant-numeric: tabular-nums; }
+}

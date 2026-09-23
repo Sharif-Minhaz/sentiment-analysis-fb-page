@@ -1,0 +1,23 @@
+# --- backend: data & trained artifacts (large, regenerable - never commit) ---
+backend/data/
+backend/models/
+backend/.venv/
+*.joblib
+*.zip
+
+# --- backend: build output from the frontend ---
+backend/static/
+
+# --- python ---
+__pycache__/
+*.py[cod]
+.env
+
+# --- frontend ---
+frontend/node_modules/
+frontend/dist/
+
+# --- editors / os ---
+.vscode/
+.idea/
+.DS_Store
