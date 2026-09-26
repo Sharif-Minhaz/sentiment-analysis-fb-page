@@ -42,6 +42,7 @@
 - [Part 24 — Things I noticed while writing this guide](#part-24--things-i-noticed-while-writing-this-guide)
 - [Part 25 — Experiments to try (the best way to learn)](#part-25--experiments-to-try-the-best-way-to-learn)
 - [Part 26 — FAQ](#part-26--faq)
+- [Part 27 — Future extension: Bangla, Banglish, sarcasm, and higher accuracy](#part-27--future-extension-bangla-banglish-sarcasm-and-higher-accuracy)
 
 ---
 
@@ -5348,7 +5349,7 @@ help.
 **Q: Why is Bangla always neutral?**
 `clean_text` keeps only `a–z`, so Bangla script becomes an empty string, and
 `predict.py` refuses to guess on empty text. Supporting Bangla would need a
-Bangla-labeled dataset and a different cleaning step.
+Bangla-labeled dataset and a different cleaning step. Part 27 is the full plan.
 
 **Q: What does `score` mean again?**
 The model's probability that the comment is positive (0 to 1).
@@ -5389,6 +5390,624 @@ automatically on startup.)
 **No.** The Page token in it does not expire. Anyone who has it can read your
 Page's data until you revoke it in Facebook's settings. It's in `.gitignore`
 so git never saves it. Never paste it into chats or screenshots.
+
+---
+
+## Part 27 — Future extension: Bangla, Banglish, sarcasm, and higher accuracy
+
+This part is a **plan**, not a description of code that exists. Nothing
+here is built yet. It answers one question: *"What would I need to do so the
+dashboard understands Bangla, Banglish and sarcasm, and gets more answers
+right?"*
+
+The honest headline first:
+
+> **The algorithm is not the main problem. The labeled data is.**
+> Every fix below needs examples with the correct answer written next to
+> them (Part 1). A fancier model trained on the wrong data still gives wrong
+> answers. A simple model trained on the right data often does well.
+
+So most of this part is about **data**: where to get it, how to label it,
+and how to measure honestly. The model switch comes after.
+
+### 27.1 Why the current model can't just be "fixed"
+
+| What you want | Why it fails today | What actually fixes it |
+|---|---|---|
+| **Bangla script** (`দারুণ সার্ভিস`) | `clean_text` keeps only `a–z`, so Bangla becomes an empty string. And Sentiment140 has zero Bangla, so there are no Bangla weights to use anyway. | Bangla labeled data **and** a cleaning step that keeps Bangla letters. |
+| **Banglish** (`khub valo product`) | The words survive cleaning but were never in the 2009 tweets, so they have no weights. One word has many spellings: `bhalo`, `valo`, `balo`, `bhaloo`. | Banglish labeled data, plus a model that copes with spelling variety (27.6.2). |
+| **Sarcasm** (`wow 3 din por reply, darun service 🙂`) | The model adds up word weights (Part 10). It sees `wow` and `darun` and says positive. The clues (the 🙂, the `!!!`, the complaint *next to* the praise) are deleted by `clean_text` or ignored by bag-of-words. | Sarcasm-labeled data and a model that reads **word order and context**, not just word counts. |
+| **Real neutral** | Sentiment140 has no neutral class; we fake it with the 0.40–0.60 band (Part 12). | A dataset with a real `neutral` label. |
+| **Your Page's language** | It learned from 2009 tweets, not shop comments (Part 10.15). | Labeled comments **from your own Page**. |
+
+Every row ends in "labeled data". That is the pattern to remember.
+
+### 27.2 The big decision: which kind of model
+
+There are four realistic paths. You said you're willing to switch tools, so
+all four are on the table.
+
+**A. Upgraded classical model (what you have, improved).** Keep TF-IDF +
+Logistic Regression, but train on Bangla/Banglish data, keep Bangla letters,
+and use *character* n-grams (27.6.2). Runs on this PC in seconds, every
+weight is still readable. But it still can't read word order, so sarcasm stays
+out of reach, and accuracy hits a ceiling.
+
+**B. Fine-tuned transformer (the recommended main path).** A **transformer**
+is a neural network that reads a whole sentence and pays attention to how
+words relate to each other ("great" *after* "broke again" means something
+different). Big organisations have already **pretrained** such models on
+billions of sentences in 100+ languages, so they already "know" Bangla and a
+fair amount of English. You then **fine-tune** it: train it a little more on
+your few thousand labeled comments so it learns *your* task. This is the
+standard way to get high accuracy on text today.
+
+**C. A large language model (LLM) through an API**, such as Claude. You send
+each comment with instructions ("label this sentiment, is it sarcastic?") and
+get an answer back. No training at all, and it handles Bangla, Banglish and
+sarcasm reasonably from day one. But you pay per comment, it needs the
+internet, your commenters' text leaves your computer, and you cannot inspect
+why it answered.
+
+**D. Hybrid (recommended long-term).** Use C to **suggest** labels, have a
+human check them, then use those checked labels to fine-tune B. B then runs
+locally, free, forever. You get most of the LLM's quality at none of its
+running cost.
+
+| | A. Classical+ | B. Fine-tuned transformer | C. LLM API | D. Hybrid (C labels → B) |
+|---|---|---|---|---|
+| Bangla script | OK with data | Good | Good | Good |
+| Banglish | Weak–OK | OK–Good | Good | Good |
+| Sarcasm | Very weak | OK (hard for everyone) | Best of the four | OK–Good |
+| Needs a GPU to train | No | Yes (free cloud GPU is enough) | No | Yes (for B) |
+| Cost per comment | Free | Free (runs on your CPU) | Paid | Free after training |
+| Works offline | Yes | Yes | No | Yes |
+| Can you inspect it | Fully (word weights) | Partly | No | Partly |
+| Comments leave your PC | No | No | **Yes** | Only during labeling |
+
+"Good" and "OK" here are rough, relative judgements, not measured numbers.
+The only numbers that count are the ones **you** measure on **your** test
+set (27.4, 27.9).
+
+**Recommendation:** do Step 0 (27.4) no matter what. Then try A as a
+cheap learning exercise, move to B for real accuracy, and use C only as a
+labeling assistant (27.8).
+
+### 27.3 New words for this part
+
+| Word | Simple meaning |
+|---|---|
+| **Transformer** | A kind of neural network that reads a sentence as a whole and learns which words affect which. BERT, RoBERTa and GPT/Claude are all transformers. |
+| **Pretrained model** | A transformer someone already trained on huge amounts of text. You download it (hundreds of MB). |
+| **Fine-tuning** | Training a pretrained model a bit more on your own labeled examples. Minutes to hours, not months. |
+| **Tokenizer** | The transformer's version of the vectorizer: it cuts text into pieces ("subwords") and turns them into numbers. Like the vectorizer, it **must travel with its model** (Part 10.10). |
+| **Subword** | A piece of a word. `unhappiness` → `un`, `happi`, `ness`. This is how transformers cope with words they never saw whole, including Banglish spellings. |
+| **Hugging Face** | The website + Python libraries (`transformers`, `datasets`) where pretrained models and datasets are shared. The "npm of ML models". |
+| **GPU** | A graphics card. Trains neural networks 10–100× faster than a CPU. This PC has none; you'd borrow one for free in Google Colab or Kaggle Notebooks. |
+| **Epoch** | One full pass over the training data. Fine-tuning usually needs 2–4. |
+| **Logits / softmax** | The model's raw scores per class; softmax turns them into probabilities that add up to 1 (like P(positive) now, but for 3 classes). |
+| **Code-mixing** | Switching languages inside one sentence: `product ta valo but delivery late`. Normal on Bangladeshi Facebook. |
+| **Transliteration** | Writing one language in another's alphabet. Banglish is Bangla transliterated into Latin letters. |
+| **Annotation / annotator** | Labeling data by hand / the person doing it. |
+| **Inter-annotator agreement** | How often two people give the same label. Measured with **Cohen's kappa** (0 = chance, 1 = perfect). It's the realistic ceiling for your model: if humans agree 80% of the time, don't expect 95%. |
+| **Macro-F1** | F1 (Part 10.11) computed per class, then averaged. Unlike accuracy, it isn't fooled when one class is rare (27.9). |
+| **Gold set** | Your hand-checked test set. The "final exam" from Part 9, but for your Page. |
+
+### 27.4 Step 0 — build your own test set first
+
+Do this **before** choosing any model. Public datasets tell you how a model
+does on *someone else's* comments. You need to know how it does on *yours*.
+
+1. **Export real comments.** From `backend/`:
+
+   ```bash
+   sqlite3 -header -csv data/app.db \
+     "SELECT id, post_id, message FROM comments ORDER BY RANDOM() LIMIT 1500" \
+     > data/to_label.csv
+   ```
+
+   Take more than you need; some will be spam or empty.
+
+2. **Label them by hand** in a spreadsheet (or a labeling tool such as
+   Label Studio, Doccano or Argilla). One row per comment:
+
+   | column | values | meaning |
+   |---|---|---|
+   | `text` | the comment | |
+   | `language` | `en` / `bn` / `banglish` / `mixed` | which kind of text it is |
+   | `sentiment` | `positive` / `negative` / `neutral` | what the writer **really** feels |
+   | `sarcastic` | `0` / `1` | are they saying the opposite of what they mean? |
+
+3. **Write labeling rules down** before you start, with examples. Without
+   rules you'll label the same kind of comment differently on Monday and
+   Friday. For example:
+
+   | Comment | sentiment | sarcastic | why |
+   |---|---|---|---|
+   | `khub valo product, thank you` | positive | 0 | plain praise |
+   | `দাম কত?` | neutral | 0 | a question, no feeling |
+   | `wow 3 din por reply, darun service 🙂` | negative | 1 | praise words, complaint meaning |
+   | `অসাধারণ! আবার অর্ডার করব` | positive | 0 | |
+   | `product ta valo but delivery onek late` | negative | 0 | mixed; your rule decides (see 27.12) |
+   | `tomra eto valo keno, amar pocket khali kore dile 😂` | positive | 1 | sarcastic **teasing** that is actually affectionate |
+
+   The last row matters: **sarcasm is not always negative.** That's why
+   `sentiment` records the real feeling and `sarcastic` is a separate column
+   (27.6.3).
+
+4. **Get a second opinion.** Ask a friend to label 200 of the same
+   comments without seeing yours. Compute Cohen's kappa with
+   `sklearn.metrics.cohen_kappa_score(yours, theirs)`. If it's low (below
+   ~0.6), your rules are unclear. Fix the rules, not the labels.
+
+5. **Freeze it.** Save ~1,000 labeled comments as
+   `backend/data/gold_test.csv`. **Never train on it.** It's the final exam
+   for every model you try from now on.
+
+6. **Measure the current model on it.** That number is your baseline.
+   You can't claim "higher accuracy" without it.
+
+The gold set is a CSV of **real** comments with **your** labels. It lives
+next to the training data, never inside the `comments` table. (The project
+rule about not putting fabricated data in the database still applies.)
+
+### 27.5 Where training data comes from
+
+**Your own labeled comments are worth more than any public dataset**, because
+they match your Page's topics and writing style. Aim for 2,000–5,000 beyond
+the gold set. 27.8 shows how an LLM can speed this up.
+
+Public datasets help you start, and teach the model general Bangla/Banglish.
+Sizes below are approximate; **check each dataset's license and read 50 random
+rows before trusting it**. Quality varies a lot.
+
+| Need | Dataset | What it is |
+|---|---|---|
+| Bangla sentiment | **SentNoB** (2021) | ~15k Bangla social-media comments, positive / negative / neutral. Closest to Facebook comments. |
+| Bangla sentiment | **BanglaBook** (2023) | ~158k Bangla book reviews, 3 classes. Large but a different topic. |
+| Bangla sentiment | **BLP-2023 shared task** data | Bangla sentiment data released for a research competition; a good benchmark to compare against. |
+| Banglish / code-mixed | **BnSentMix** (2024) | ~20k code-mixed Bangla–English sentences with sentiment labels (includes a "mixed" class you'll need to map). |
+| Bangla sarcasm | **Ben-Sarc** (2023), **BanglaSarc** (2022) | Bangla Facebook/social-media comments labeled sarcastic or not. |
+| English with neutral | **TweetEval (sentiment)** | Tweets labeled positive / negative / neutral. Better than Sentiment140 for a 3-class model. |
+| English sarcasm | **iSarcasmEval** (SemEval-2022 Task 6) | Tweets where the *authors themselves* marked their sarcasm. |
+
+Most of these are on the Hugging Face Hub or GitHub; search by name.
+
+**Map labels carefully.** Every dataset has its own label names and rules.
+Write one small function per dataset in `dataset.py` that converts its labels
+to your `positive / negative / neutral` + `sarcastic` scheme, and print the
+balance after mapping (like `load_splits()` does now).
+
+### 27.6 Handling each problem
+
+#### 27.6.1 Bangla script
+
+Three things change:
+
+**1. Cleaning must keep Bangla letters.** Bangla lives in the Unicode range
+`U+0980`–`U+09FF`. For the classical path (A), `clean_text` would become
+roughly:
+
+```python
+import unicodedata
+
+BANGLA = "ঀ-৿"
+
+def clean_text(text: str) -> str:
+    text = unicodedata.normalize("NFC", text)                # see point 2
+    text = text.lower()                                      # only affects Latin letters
+    text = re.sub(r"https?://\S+|www\.\S+", " ", text)       # also fixes Part 24.2
+    text = re.sub(r"@\w+", " ", text)
+    text = re.sub(rf"[^a-z{BANGLA}\s]", " ", text)           # keep a-z AND Bangla
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+```
+
+`rf"..."` is a raw f-string: backslashes kept as-is **and** `{BANGLA}` filled
+in. The rule from Part 9 still holds: training and prediction must use this
+**same** function, and changing it means retraining.
+
+**2. Normalize Unicode.** The same Bangla letter can be stored as different
+byte sequences (e.g. `য়` as one character, or as `য` + a dot mark `়`). They
+look identical on screen but are different "words" to a computer.
+`unicodedata.normalize("NFC", ...)` makes them consistent. BanglaBERT
+(27.7) goes further and expects its own normalizer
+(`csebuetnlp/normalizer` on GitHub). Use whatever the model's page says.
+
+**3. Watch the stop-word trap again.** Bangla stop-word lists often contain
+`না` and `নয়` ("not"). Removing them flips meanings, exactly like the
+English `not` problem in Part 10. Safest: don't remove stop words at all.
+
+For the transformer path (B), clean **less**: the model was pretrained on
+raw text, punctuation and emoji included, and those carry meaning. Usually
+you only remove URLs, replace `@mentions` with a placeholder like `@user`,
+and normalize Unicode.
+
+#### 27.6.2 Banglish
+
+Banglish is hard for three reasons: the spelling is not standard (`bhalo`,
+`valo`, `balo`), it's often mixed with English inside one sentence, and to a
+computer it looks like English (same letters).
+
+Three ways to handle it, cheapest first:
+
+**a) Character n-grams (classical path, easy experiment).** Instead of whole
+words, let TF-IDF count **pieces of words**:
+
+```python
+"char-2to5": dict(analyzer="char_wb", ngram_range=(2, 5), max_features=200_000),
+```
+
+`analyzer="char_wb"` = "character n-grams inside word boundaries".
+`bhalo` and `valo` then share the pieces `al`, `alo`, `lo`, so the model
+learns something from both. Add it to `CONFIGS` in `train.py` and compare on
+val, the same way as Part 25.5. (Your data must include Banglish for this to
+help.)
+
+**b) Transliterate to Bangla script first.** Convert `khub valo` →
+`খুব ভালো` with a transliteration model (e.g. AI4Bharat's IndicXlit supports
+Bengali), then treat it as Bangla. Works well when transliteration is right;
+when it's wrong, the error passes straight into the sentiment model.
+
+**c) A transformer that has seen romanized text (recommended).** Google's
+MuRIL was pretrained partly on transliterated Indian-language text, and
+XLM-RoBERTa saw a lot of messy web text. Fine-tuned with Banglish examples,
+they usually handle spelling variety far better than word counts can, thanks
+to subwords.
+
+**Detecting the language.** You need this mostly to **report** accuracy per
+language, and to route comments if you end up with separate models. Bangla
+script is easy to detect; English vs Banglish is not:
+
+```python
+BANGLA_CHAR = re.compile(r"[ঀ-৿]")
+LATIN_CHAR = re.compile(r"[a-zA-Z]")
+BANGLISH_HINTS = {"ami", "tumi", "apni", "valo", "bhalo", "kharap", "khub",
+                  "onek", "ache", "nai", "na", "ki", "keno", "koto", "dam", "ta"}
+
+def detect_language(text: str) -> str:
+    text = re.sub(r"https?://\S+|www\.\S+|@\w+", " ", text)   # links/mentions are Latin letters too
+    has_bn = bool(BANGLA_CHAR.search(text))
+    has_latin = bool(LATIN_CHAR.search(text))
+    if has_bn and has_latin:
+        return "mixed"
+    if has_bn:
+        return "bn"
+    words = set(text.lower().split())
+    return "banglish" if len(words & BANGLISH_HINTS) >= 1 else "en"
+```
+
+`words & BANGLISH_HINTS` is **set intersection**: the words that appear in
+both sets. This hint list is a crude starting point. Check it against your
+gold set's `language` column and grow the list, or later train a tiny
+classifier on that column.
+
+#### 27.6.3 Sarcasm, and how to group it
+
+**Separate the two questions.** Don't make sarcasm a fourth sentiment. Ask
+two independent questions of every comment:
+
+1. **What does the writer really feel?** → `sentiment`: positive / negative / neutral
+2. **Are they saying it indirectly/ironically?** → `sarcastic`: yes / no
+
+Most sarcasm hides a **negative** feeling behind **positive** words. So if you
+grouped sarcastic comments by their surface words, you would count
+complaints as praise, which is exactly the mistake the current model makes.
+But some sarcasm is friendly teasing that's really positive (the last example
+in 27.4). That's why you **label the real feeling directly** and never use a
+rule like "sarcastic → flip positive to negative".
+
+**Grouping on the dashboard.** With both columns stored, you can choose any
+view without retraining:
+
+| View | How it groups | Good for |
+|---|---|---|
+| **By real feeling** (recommended default) | Sarcastic complaints count as negative, sarcastic teasing as positive. Sarcasm shown as a tag and a filter ("18 of 120 negatives were sarcastic"). | Honest totals |
+| **Sarcasm as its own bucket** | positive / negative / neutral / sarcastic | Spotting sarcasm trends |
+| **Both** | e.g. "negative (sarcastic)" as a sub-group of negative | Detailed drill-down |
+
+```python
+def display_group(sentiment: str, sarcastic: bool) -> str:
+    return f"{sentiment} (sarcastic)" if sarcastic else sentiment
+```
+
+**Why sarcasm is hard, and what helps:**
+
+- **The clues are what `clean_text` deletes.** 🙂 🙄 😒 😂, `!!!`, `...`,
+  quotation marks, `wow`/`waah`. For sarcasm, keep emoji and punctuation, or
+  turn emoji into words (the `emoji` library's `demojize()` turns 🙄 into
+  `:face_with_rolling_eyes:`).
+- **It often needs context.** `"great job"` under a post announcing a price
+  cut is sincere; under a post apologising for a late delivery it's probably
+  sarcastic. Feed the model both: `post: <post text> </s> comment: <comment>`.
+  Your `posts` table already stores `message`, so the context is available.
+- **It's rare.** Only a small share of comments are sarcastic. A model that
+  always says "not sarcastic" can score very high *accuracy* and be useless.
+  Measure the **precision and recall of the sarcastic class** instead, and
+  use class weights during training.
+- **Use a threshold, like the neutral band.** Only raise the flag when
+  P(sarcastic) is high (say ≥ 0.7). A wrong sarcasm flag is more confusing
+  to a reader than a missing one. Tune the threshold on val, not test.
+- **Expect lower numbers than sentiment.** Even human annotators disagree
+  on sarcasm often. Your kappa from 27.4 tells you the realistic ceiling.
+
+**Model setup:** start with **two separate fine-tuned models** (one for
+sentiment, one for sarcasm). It's simpler to debug. Later you can merge them
+into one model with two outputs ("multi-task"), which is faster to run.
+
+### 27.7 The recommended model: fine-tuning a transformer
+
+**Candidates** (all free on Hugging Face). Try more than one and let val
+decide, exactly like `train.py` compares configs today:
+
+| Model id | Good at | Weak at |
+|---|---|---|
+| `xlm-roberta-base` | One model for English + Bangla + some Banglish; good default | Slightly behind specialists on pure Bangla |
+| `csebuetnlp/banglabert` | Bangla script (built by BUET for Bangla) | English and Banglish; needs its normalizer |
+| `google/muril-base-cased` | Indian languages incl. romanized text; good Banglish candidate | Needs testing on your data |
+
+**Hardware.** This PC has no NVIDIA GPU, 4 CPU cores and 7 GB RAM. That's
+enough to **run** a base-size model (roughly 1 GB of memory once loaded),
+but training on a CPU would be painfully slow. Train in **Google Colab** or
+**Kaggle Notebooks**, which give free GPU time. For a base model on a few
+tens of thousands of short comments, expect minutes to about an hour per
+run on a free GPU. Then download the saved model folder into
+`backend/models/`.
+
+**New libraries** (training side): `torch`, `transformers`, `datasets`,
+`accelerate`. The web app only needs `torch` (the CPU-only build is much
+smaller) and `transformers`.
+
+**A minimal fine-tuning script** (`train_transformer.py`, meant for Colab).
+Assumes CSVs with `text` and `sentiment` columns:
+
+```python
+import numpy as np
+from datasets import load_dataset
+from sklearn.metrics import f1_score
+from transformers import (AutoModelForSequenceClassification, AutoTokenizer,
+                          Trainer, TrainingArguments)
+
+MODEL = "xlm-roberta-base"
+LABELS = ["negative", "neutral", "positive"]
+label2id = {name: i for i, name in enumerate(LABELS)}
+
+ds = load_dataset("csv", data_files={"train": "data/train.csv",
+                                     "validation": "data/val.csv"})
+ds = ds.map(lambda row: {"label": label2id[row["sentiment"]]})
+
+tokenizer = AutoTokenizer.from_pretrained(MODEL)
+ds = ds.map(lambda batch: tokenizer(batch["text"], truncation=True, max_length=128),
+            batched=True)
+
+model = AutoModelForSequenceClassification.from_pretrained(
+    MODEL, num_labels=len(LABELS),
+    id2label=dict(enumerate(LABELS)), label2id=label2id,
+)
+
+def compute_metrics(eval_pred):
+    logits, labels = eval_pred
+    preds = np.argmax(logits, axis=-1)          # the class with the highest score
+    return {"macro_f1": f1_score(labels, preds, average="macro")}
+
+args = TrainingArguments(
+    output_dir="models/xlmr-sentiment",
+    num_train_epochs=3,
+    learning_rate=2e-5,                         # small: nudge, don't overwrite, what it knows
+    per_device_train_batch_size=16,
+    eval_strategy="epoch",
+    save_strategy="epoch",
+    load_best_model_at_end=True,                # keep the epoch with the best val score
+    metric_for_best_model="macro_f1",
+    seed=42,
+)
+
+trainer = Trainer(model=model, args=args,
+                  train_dataset=ds["train"], eval_dataset=ds["validation"],
+                  processing_class=tokenizer, compute_metrics=compute_metrics)
+trainer.train()
+trainer.save_model("models/xlmr-sentiment/best")   # model + tokenizer, together
+```
+
+What maps to what you already know:
+
+| Here | In the current project |
+|---|---|
+| `AutoTokenizer` | `TfidfVectorizer` |
+| `AutoModelForSequenceClassification` | `LogisticRegression` |
+| `trainer.train()` | `pipeline.fit()` |
+| `trainer.save_model(...)` (saves model **and** tokenizer) | `joblib.dump(pipeline, ...)` |
+| `eval_strategy="epoch"` + `load_best_model_at_end` | comparing configs on val |
+| `max_length=128` | nothing: TF-IDF had no length limit. Longer comments get cut off. |
+
+**The Pipeline rule, again.** A model loaded with a *different* tokenizer
+gets the same silent garbage as Part 10.10's "pizza" column. Always load
+both from the same folder.
+
+**Using it:**
+
+```python
+from transformers import pipeline
+
+clf = pipeline("text-classification", model="models/xlmr-sentiment/best", top_k=None)
+clf(["delivery onek late 😒", "অসাধারণ সার্ভিস"])
+# one list of {label, score} per comment, e.g. [{'label': 'negative', 'score': 0.9}, ...]
+```
+
+(Hugging Face's `pipeline` is a different thing from sklearn's `Pipeline`;
+same word, unrelated code.)
+
+**Neutral becomes a real class.** The 0.40–0.60 band retires. You can keep
+the *idea* as an "uncertain" flag: if the highest class probability is below,
+say, 0.5, show the comment as uncertain instead of trusting the label.
+
+### 27.8 Speeding up labeling with an LLM (optional)
+
+Labeling 5,000 comments by hand is slow. An LLM can **propose** labels, and
+you **review** them. Reviewing is several times faster than labeling from
+scratch.
+
+Two rules:
+
+1. **A human checks every label that goes into the gold test set.** If the
+   test set is LLM-labeled, you are measuring "how often does my model agree
+   with the LLM", not "how often is it right".
+2. **Privacy is your decision.** This sends your commenters' words to an
+   outside company. Check Meta's Platform Terms and your own privacy policy
+   first, and strip author names (you only need the text).
+
+A sketch using Claude through Anthropic's Python SDK (`uv add anthropic
+pydantic`; the key goes in `.env` as `ANTHROPIC_API_KEY`, never in code):
+
+```python
+from typing import Literal
+
+import anthropic
+from pydantic import BaseModel
+
+
+class Label(BaseModel):
+    language: Literal["en", "bn", "banglish", "mixed"]
+    sentiment: Literal["positive", "negative", "neutral"]
+    sarcastic: bool
+    reason: str                      # one short sentence; helps you review faster
+
+
+RULES = """You label comments from a Bangladeshi shop's Facebook Page.
+Comments may be English, Bangla script, Banglish (romanized Bangla), or mixed.
+sentiment = what the writer really feels, not the surface words.
+sarcastic = true only if they say the opposite of what they mean.
+Sarcasm can be affectionate teasing; then sentiment can still be positive.
+Questions with no feeling are neutral.
+<paste your labeling examples from 27.4 here>"""
+
+client = anthropic.Anthropic()       # reads ANTHROPIC_API_KEY
+
+
+def suggest_label(comment: str, post: str = "") -> Label | None:
+    response = client.messages.parse(
+        model="claude-opus-5",
+        max_tokens=4000,
+        system=RULES,
+        messages=[{"role": "user", "content": f"Post: {post}\n\nComment: {comment}"}],
+        output_format=Label,         # the answer must match the Label class
+    )
+    if response.stop_reason == "refusal":
+        return None                  # label this one by hand
+    return response.parsed_output
+```
+
+`client.messages.parse(..., output_format=Label)` makes the API return JSON
+that matches the `Label` class and turns it into a Python object, so you
+never parse free text. `Literal[...]` means "only these exact values are
+allowed".
+
+Practical notes:
+- **Measure the LLM on your gold set first.** Run it on the 1,000 gold
+  comments and compare with your labels (macro-F1, kappa). That tells you
+  how much review it needs.
+- **Cheaper models exist** (`claude-sonnet-5`, `claude-haiku-4-5`). Switch
+  only if they score close enough on the gold set.
+- **Bulk jobs:** Anthropic's Message Batches API processes many requests
+  asynchronously at a lower price. Good for labeling thousands of comments
+  overnight.
+- **Could the LLM *be* the classifier?** Yes (path C in 27.2). The
+  `suggest_label` function is essentially that. The trade-off is ongoing
+  cost, needing the internet, and the privacy question on every refresh.
+
+### 27.9 Measuring "higher accuracy" honestly
+
+**Use macro-F1, not accuracy.** Suppose 70% of your comments are positive. A
+model that always says "positive" scores **70% accuracy** and is useless.
+Its macro-F1 is terrible, because it gets 0 on negative and neutral. Macro-F1
+treats each class as equally important:
+
+```python
+from sklearn.metrics import classification_report, f1_score
+
+f1_score(y_true, y_pred, average="macro")
+print(classification_report(y_true, y_pred, digits=3))   # per-class detail
+```
+
+**Report per language.** One overall number hides problems. A model can be
+great on English and useless on Banglish. Fill a table like this for every
+model you try, on the gold set:
+
+| Model | Overall macro-F1 | en | bn | banglish | mixed | Sarcasm precision | Sarcasm recall |
+|---|---|---|---|---|---|---|---|
+| Current (Sentiment140 bigram-50k) | | | | | | n/a | n/a |
+| A: char n-grams + Bangla data | | | | | | n/a | n/a |
+| B: xlm-roberta-base fine-tuned | | | | | | | |
+| B: banglabert fine-tuned | | | | | | | |
+| C: LLM zero-shot | | | | | | | |
+
+**The same exam rules as Part 9 apply.** Compare models on val. Touch the
+gold set only to compare **finalists**, not after every tweak. If you keep
+tuning until gold looks good, gold stops being a fair exam.
+
+**Realistic expectations.** Published results for fine-tuned transformers on
+Bangla social-media sentiment (e.g. SentNoB) are around 0.7 macro-F1, not
+0.95. Social-media text is noisy and humans disagree. Your own
+domain-specific data can push you above public benchmarks, and your
+inter-annotator agreement (27.4) is the practical ceiling.
+
+### 27.10 Wiring it into this repo (once a model wins)
+
+The layering from Part 2 stays exactly as it is. `predict.py` is still the
+only doorway between ML and the web app.
+
+| File | Change |
+|---|---|
+| `dataset.py` | Loaders + label mappers for each new dataset; the new cleaning function (27.6.1); `detect_language()`. |
+| `train.py` | Stays for the classical models. |
+| `train_transformer.py` (new) | The fine-tuning script (27.7). Runs in Colab. Writes to a **versioned** folder like `models/xlmr-sentiment-2026-10-01/`, so a bad run can't overwrite a good one (the `train.py` trap). Writes per-language metrics into its `model_meta.json`. |
+| `predict.py` | Loads the transformer once (keep the `lru_cache` idea). `classify()` keeps returning the same keys (`sentiment`, `score`, `confidence`) so the rest of the app doesn't break, plus new ones: `language`, `sarcastic`, `sarcasm_score`. |
+| `db.py` | New columns on `comments`: `language TEXT`, `sarcastic INTEGER`, `model_version TEXT`. `CREATE TABLE IF NOT EXISTS` won't add columns to an existing table, so add them with `ALTER TABLE comments ADD COLUMN ...` (or delete `app.db`, Part 26). `model_version` records which model labeled each row. Reclassify old rows by setting `sentiment = NULL` (Part 25.1). |
+| `app.py` / `analytics()` | Add sarcasm counts and a per-language breakdown to the JSON. |
+| Frontend | A sarcasm tile and a language filter. Sarcasm is a **tag**, not a polarity, so don't add a fourth hue to the diverging color scale (see CLAUDE.md, chart colors). Use an icon or outline. If you do add a color, re-validate it for colorblind separation. |
+| `pyproject.toml` | `torch` (CPU build) and `transformers`. The first install is a large download. |
+
+### 27.11 Roadmap checklist
+
+Do these in order; each step is useful on its own.
+
+- [ ] **0. Gold set:** label ~1,000 real comments (27.4), check agreement,
+      freeze it, measure the current model. *(No code changes.)*
+- [ ] **1. Classical upgrade (learning step):** keep Bangla in `clean_text`,
+      add SentNoB + BnSentMix via `dataset.py`, try `char_wb` n-grams.
+      Compare on gold. *(Runs on this PC.)*
+- [ ] **2. More of your own labels:** 2,000–5,000 comments, optionally with
+      LLM suggestions (27.8) + human review.
+- [ ] **3. Fine-tune** 2–3 transformer candidates for sentiment in Colab.
+      Pick the winner on val, confirm on gold.
+- [ ] **4. Sarcasm model:** Ben-Sarc + your `sarcastic` labels, with post
+      context, threshold tuned on val.
+- [ ] **5. Integrate** (27.10): `predict.py`, new DB columns, dashboard
+      changes, reclassify.
+- [ ] **6. Keep labeling:** a few hundred new comments each month,
+      retrain occasionally. Language on your Page will drift.
+
+### 27.12 Traps to avoid
+
+- **Duplicate comments across splits.** Facebook comments repeat a lot
+  (`price?`, `inbox please`, `nice`). If the same text lands in both train
+  and test, scores look better than they are. Remove exact duplicates before
+  splitting.
+- **Splitting by comment instead of by post.** Comments under one post
+  share topic and wording. Put all comments of a post in the **same** split
+  (sklearn's `GroupShuffleSplit` with `groups=post_id`), or your test set
+  quietly leaks from training.
+- **Inconsistent "mixed" comments.** `valo product but delivery late` has
+  both feelings. Decide once (e.g. "label the feeling the writer ends on",
+  or add a `mixed` class) and write it into your rules. BnSentMix has a
+  mixed class; map it deliberately.
+- **Removing `না`.** The stop-word trap, in Bangla (27.6.1).
+- **Tokenizer from a different folder than the model.** Silent garbage (27.7).
+- **Trusting overall accuracy.** Use macro-F1, per language, and sarcasm
+  precision/recall (27.9).
+- **Unreviewed LLM labels in the gold set** (27.8).
+- **Forgetting to restart `app.py`** after swapping models. Still cached
+  (Part 24.4).
 
 ---
 
